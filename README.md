@@ -1,2 +1,2 @@
 # Fiber
-Search for cloths by material
+Search for clothes by material
