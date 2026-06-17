@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+
+# Data — the SQLite DB is built by the crawler and copied to the server, not committed
+data/
+
+# Node / Astro (also covered by web/.gitignore)
+node_modules/
+dist/
+.astro/

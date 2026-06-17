@@ -1,0 +1,141 @@
+---
+// ShopByFiber — static frontend (Astro). Talks to the self-hosted API.
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShopByFiber — search clothes by material</title>
+<meta name="description" content="Search clothing by what it's made of — find products by fiber and material composition.">
+<style is:global>
+  :root { --bg:#faf8f5; --card:#fff; --ink:#2a2622; --muted:#8a8378; --accent:#5b7c5b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Georgia, 'Times New Roman', serif; background:var(--bg); color:var(--ink); }
+  header { padding:2rem 1.5rem 1rem; max-width:1100px; margin:0 auto; }
+  h1 { margin:0 0 .25rem; font-size:2rem; letter-spacing:-.02em; }
+  h1 span { color:var(--accent); }
+  .stats { color:var(--muted); font-size:.9rem; }
+  .controls { display:flex; gap:.5rem; flex-wrap:wrap; max-width:1100px; margin:1rem auto 0; padding:0 1.5rem; }
+  input[type=search], select {
+    font:inherit; padding:.55rem .8rem; border:1px solid #ddd6cc; border-radius:8px; background:var(--card);
+  }
+  input[type=search] { flex:1; min-width:220px; }
+  main { max-width:1100px; margin:1.25rem auto 3rem; padding:0 1.5rem; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:1rem; }
+  .card { background:var(--card); border:1px solid #eee7da; border-radius:10px; overflow:hidden; display:flex; flex-direction:column; }
+  .card img { width:100%; aspect-ratio:4/5; object-fit:cover; background:#f0ece5; }
+  .card .noimg { width:100%; aspect-ratio:4/5; background:#f0ece5; display:flex; align-items:center; justify-content:center; color:var(--muted); }
+  .card .body { padding:.7rem .8rem .9rem; display:flex; flex-direction:column; gap:.3rem; flex:1; }
+  .brand { font-size:.75rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  .title { font-size:.95rem; line-height:1.3; }
+  .title a { color:inherit; text-decoration:none; }
+  .title a:hover { text-decoration:underline; }
+  .price { font-size:.85rem; color:var(--muted); }
+  .fibersum { margin-top:auto; font-size:.8rem; line-height:1.4; padding-top:.4rem; }
+  .badge { display:inline-block; font-size:.68rem; padding:.1rem .45rem; border-radius:99px; margin-right:.3rem; vertical-align:1px; }
+  .badge.parsed { background:#e2eede; color:#3c5a3c; }
+  .badge.inferred { background:#f3ead4; color:#8a6d2f; }
+  .badge.unknown { background:#eee; color:#888; }
+  .pager { display:flex; gap:.75rem; align-items:center; justify-content:center; margin-top:1.5rem; }
+  button { font:inherit; padding:.45rem 1rem; border:1px solid #ddd6cc; background:var(--card); border-radius:8px; cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  .empty { text-align:center; color:var(--muted); padding:3rem 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ShopByFiber<span>.</span></h1>
+  <div>Search clothes by what they're made of.</div>
+  <div class="stats" id="stats">loading…</div>
+</header>
+<div class="controls">
+  <input type="search" id="q" placeholder="Search products, brands… (e.g. hoodie, merino, jacket)">
+  <select id="fiber"><option value="">Any fiber</option></select>
+  <select id="source">
+    <option value="">Any data quality</option>
+    <option value="parsed">Exact composition</option>
+    <option value="inferred">Inferred</option>
+    <option value="unknown">Unknown</option>
+  </select>
+</div>
+<main>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" hidden>No results.</div>
+  <div class="pager">
+    <button id="prev">&larr; Prev</button>
+    <span id="pageinfo"></span>
+    <button id="next">Next &rarr;</button>
+  </div>
+</main>
+<script is:inline>
+const $ = id => document.getElementById(id);
+// API base: empty when served by the API itself (localhost/dev); the live
+// self-hosted API when served as a static site from GitHub Pages.
+const API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? '' : 'https://api.shopbyfiber.com';
+let page = 1, total = 0, perPage = 24, timer = null;
+
+async function loadStats() {
+  const s = await (await fetch(API + '/api/stats')).json();
+  $('stats').textContent = `${s.total.toLocaleString()} items — ` +
+    `${(s.by_source.parsed||0).toLocaleString()} exact, ` +
+    `${(s.by_source.inferred||0).toLocaleString()} inferred, ` +
+    `${(s.by_source.unknown||0).toLocaleString()} unknown`;
+}
+
+async function loadFibers() {
+  const fibers = await (await fetch(API + '/api/fibers')).json();
+  for (const f of fibers) {
+    const o = document.createElement('option');
+    o.value = f; o.textContent = f;
+    $('fiber').appendChild(o);
+  }
+}
+
+async function search() {
+  const params = new URLSearchParams({
+    q: $('q').value, fiber: $('fiber').value, source: $('source').value,
+    page, per_page: perPage,
+  });
+  const data = await (await fetch(API + '/api/search?' + params)).json();
+  total = data.total;
+  const grid = $('grid');
+  grid.innerHTML = '';
+  $('empty').hidden = data.results.length > 0;
+  for (const p of data.results) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const img = p.image
+      ? `<img src="${p.image}" loading="lazy" alt="">`
+      : `<div class="noimg">no image</div>`;
+    card.innerHTML = `${img}
+      <div class="body">
+        <div class="brand">${esc(p.brand)}</div>
+        <div class="title"><a href="${p.url}" target="_blank" rel="noopener sponsored">${esc(p.title)}</a></div>
+        <div class="price">${p.price ? '$' + p.price.toFixed(2) : ''}</div>
+        <div class="fibersum"><span class="badge ${p.fiber_source}">${p.fiber_source}</span>${esc(p.fiber_summary)}</div>
+      </div>`;
+    grid.appendChild(card);
+  }
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  $('pageinfo').textContent = `${page} / ${pages} (${total.toLocaleString()} results)`;
+  $('prev').disabled = page <= 1;
+  $('next').disabled = page >= pages;
+}
+
+function esc(s) {
+  return (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function reset() { page = 1; search(); }
+$('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(reset, 250); });
+$('fiber').addEventListener('change', reset);
+$('source').addEventListener('change', reset);
+$('prev').addEventListener('click', () => { page--; search(); });
+$('next').addEventListener('click', () => { page++; search(); });
+
+loadStats(); loadFibers(); search();
+</script>
+</body>
+</html>

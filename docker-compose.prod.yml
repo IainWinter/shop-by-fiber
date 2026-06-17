@@ -1,0 +1,12 @@
+# Production overlay for self-hosting behind your existing nginx reverse proxy.
+# Usage on your server:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# The API binds to 127.0.0.1:8000 only — not reachable from the internet
+# directly. Your host nginx proxies api.shopbyfiber.com -> 127.0.0.1:8000
+# and handles TLS. Change the host port if 8000 is already taken.
+services:
+  web:
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped

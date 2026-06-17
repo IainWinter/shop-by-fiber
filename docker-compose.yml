@@ -1,0 +1,18 @@
+services:
+  web:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      - FIBER_DB=/data/fiber.db
+    volumes:
+      - ./data:/data
+
+  crawler:
+    build: ./api
+    profiles: [crawl]
+    command: python crawl.py
+    environment:
+      - FIBER_DB=/data/fiber.db
+    volumes:
+      - ./data:/data
