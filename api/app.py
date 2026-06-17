@@ -34,7 +34,9 @@ FIBERS = [
 
 
 def query_db(sql, params=()):
-    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    # immutable=1: serve a static, read-only DB without needing to create the
+    # WAL/-shm sidecars — required when the DB is on a read-only mount.
+    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro&immutable=1", uri=True)
     conn.row_factory = sqlite3.Row
     try:
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
